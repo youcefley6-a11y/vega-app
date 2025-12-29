@@ -87,13 +87,13 @@ module.exports = () => {
   return {
     expo: {
       name: 'Vega',
+      scheme: 'com.vega',
       displayName: 'Vega',
-      newArchEnabled: true,
+      newArchEnabled: false,
       autolinking: {exclude: ['expo-splash-screen']},
       plugins,
       slug: 'vega',
       version: '3.2.6',
-      sdkVersion: '52.0.0',
       userInterfaceStyle: 'dark',
       android: {
         ...(hasAndroidGoogleServices
@@ -116,9 +116,6 @@ module.exports = () => {
         manifestPermissions: [
           {name: 'READ_EXTERNAL_STORAGE', maxSdkVersion: 32},
           {name: 'WRITE_EXTERNAL_STORAGE', maxSdkVersion: 32},
-        ],
-        intentFilters: [
-          {action: 'VIEW', category: 'BROWSABLE', data: {scheme: 'com.vega'}},
         ],
         queries: [
           {action: 'VIEW', data: {scheme: 'http'}},
