@@ -82,6 +82,7 @@ const SeriesEpisodes = ({navigation, route}: SeriesEpisodesRouteProp) => {
                     primaryTitle: fileName,
                     poster: {},
                     providerValue: 'vega',
+                    doNotTrack: true,
                   });
                 }}>
                 <View className="w-32 h-full relative">

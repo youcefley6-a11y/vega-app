@@ -1,5 +1,5 @@
 import {cacheStorage, mainStorage} from './StorageService';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 /**
  * Storage keys for downloads

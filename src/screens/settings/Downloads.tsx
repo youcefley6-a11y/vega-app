@@ -1,6 +1,6 @@
 import {View, Text, Image, Platform, TouchableOpacity} from 'react-native';
 import requestStoragePermission from '../../lib/file/getStoragePermission';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import {downloadFolder} from '../../lib/constants';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import React, {useState, useEffect} from 'react';
@@ -32,9 +32,17 @@ const isVideoFile = (filename: string): boolean => {
 };
 
 // Add this interface after the existing imports
+interface DownloadedFile {
+  uri: string;
+  exists: boolean;
+  isDirectory?: boolean;
+  size?: number;
+  modificationTime?: number;
+}
+
 interface MediaGroup {
   title: string;
-  episodes: FileSystem.FileInfo[];
+  episodes: DownloadedFile[];
   thumbnail?: string;
   isMovie: boolean;
 }
@@ -58,6 +66,7 @@ const getBaseName = (fileName: string): string => {
     .replace(/season[\s-]*\d+/gi, '') // remove season indicators
     .replace(/\s*-\s*\d+/, '') // remove trailing numbers
     .replace(/\s*\d+\s*$/, '') // remove ending numbers
+    .replace(/[_.]/g, ' ') // replace underscores and dots with spaces
     .trim();
 
   // Remove any remaining numbers at the end that might be episode numbers
@@ -95,7 +104,7 @@ const getEpisodeInfo = (
 };
 
 const Downloads = () => {
-  const [files, setFiles] = useState<FileSystem.FileInfo[]>([]);
+  const [files, setFiles] = useState<DownloadedFile[]>([]);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
@@ -107,10 +116,34 @@ const Downloads = () => {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  // Load files from the download folder on initial render
+  // Load cached data first, then refresh from filesystem
   useEffect(() => {
-    const getFiles = async () => {
-      setLoading(true);
+    const loadData = async () => {
+      // Load from cache first for instant display
+      const cachedFiles = downloadsStorage.getFilesInfo();
+      const cachedThumbnails = downloadsStorage.getThumbnails();
+
+      if (cachedFiles && cachedFiles.length > 0) {
+        // Filter and validate cached files
+        const validCachedFiles: DownloadedFile[] = cachedFiles
+          .filter(f => f.uri)
+          .map(f => ({
+            uri: f.uri!,
+            exists: f.exists,
+            isDirectory:
+              'isDirectory' in f ? (f.isDirectory as boolean) : undefined,
+            size: 'size' in f ? (f as any).size : undefined,
+            modificationTime:
+              'modificationTime' in f ? (f as any).modificationTime : undefined,
+          }));
+        setFiles(validCachedFiles);
+        setLoading(false);
+      }
+      if (cachedThumbnails) {
+        setThumbnails(cachedThumbnails);
+      }
+
+      // Then refresh from filesystem
       const granted = await requestStoragePermission();
       if (granted) {
         try {
@@ -136,20 +169,33 @@ const Downloads = () => {
             }),
           );
 
+          // Filter out files without uri and cast to DownloadedFile
+          const validFiles: DownloadedFile[] = filesInfo
+            .filter(f => f.uri && f.exists)
+            .map(f => ({
+              uri: f.uri!,
+              exists: f.exists,
+              isDirectory: 'isDirectory' in f ? f.isDirectory : undefined,
+              size: 'size' in f ? (f as any).size : undefined,
+              modificationTime:
+                'modificationTime' in f
+                  ? (f as any).modificationTime
+                  : undefined,
+            }));
+
           // Save files info to storage
-          downloadsStorage.saveFilesInfo(filesInfo);
-          setFiles(filesInfo);
-          setLoading(false);
+          downloadsStorage.saveFilesInfo(validFiles as any);
+          setFiles(validFiles);
         } catch (error) {
           console.error('Error reading files:', error);
-          setLoading(false);
         }
       }
+      setLoading(false);
     };
-    getFiles();
+    loadData();
   }, []);
 
-  async function getThumbnail(file: FileSystem.FileInfo) {
+  async function getThumbnail(file: DownloadedFile) {
     try {
       // Verify it's a video file before attempting to generate thumbnail
       const fileName = file.uri.split('/').pop();
@@ -167,11 +213,18 @@ const Downloads = () => {
     }
   }
 
-  // Generate thumbnails for each file
+  // Generate thumbnails for files that don't have them cached
   useEffect(() => {
     const getThumbnails = async () => {
       try {
-        const thumbnailPromises = files.map(async file => {
+        // Only generate thumbnails for files that don't have one
+        const filesToProcess = files.filter(file => !thumbnails[file.uri]);
+
+        if (filesToProcess.length === 0) {
+          return;
+        }
+
+        const thumbnailPromises = filesToProcess.map(async file => {
           const thumbnail = await getThumbnail(file);
           if (thumbnail) {
             return {[file.uri]: thumbnail};
@@ -180,15 +233,18 @@ const Downloads = () => {
         });
 
         const thumbnailResults = await Promise.all(thumbnailPromises);
-        const newThumbnails = thumbnailResults.reduce((acc, curr) => {
-          return curr ? {...acc, ...curr} : acc;
-        }, {});
+        const newThumbnails = thumbnailResults.reduce<Record<string, string>>(
+          (acc, curr) => {
+            return curr ? {...acc, ...curr} : acc;
+          },
+          {},
+        );
 
-        // Save thumbnails to storage and fix the type error by ensuring non-null
-        if (newThumbnails) {
-          downloadsStorage.saveThumbnails(newThumbnails);
+        if (Object.keys(newThumbnails).length > 0) {
+          const mergedThumbnails = {...thumbnails, ...newThumbnails};
+          downloadsStorage.saveThumbnails(mergedThumbnails);
+          setThumbnails(mergedThumbnails);
         }
-        setThumbnails(newThumbnails || {});
       } catch (error) {
         console.error('Error generating thumbnails:', error);
       }
@@ -198,19 +254,6 @@ const Downloads = () => {
       getThumbnails();
     }
   }, [files]);
-
-  // Load files and thumbnails from storage on initial render
-  useEffect(() => {
-    const cachedFiles = downloadsStorage.getFilesInfo();
-    if (cachedFiles) {
-      setFiles(cachedFiles);
-    }
-
-    const cachedThumbnails = downloadsStorage.getThumbnails();
-    if (cachedThumbnails) {
-      setThumbnails(cachedThumbnails);
-    }
-  }, []);
 
   const deleteFiles = async () => {
     try {
@@ -248,7 +291,7 @@ const Downloads = () => {
   };
 
   // Add this function to group files by series name
-  const groupMediaFiles = (): MediaGroup[] => {
+  const groupMediaFiles = React.useMemo((): MediaGroup[] => {
     const groups: Record<string, MediaGroup> = {};
 
     // First pass: Group by normalized base name
@@ -261,14 +304,14 @@ const Downloads = () => {
         groups[normalizedBaseName] = {
           title: baseName,
           episodes: [],
-          thumbnail: thumbnails[file.uri],
+          thumbnail: undefined,
           isMovie: true,
         };
       }
       groups[normalizedBaseName].episodes.push(file);
     });
 
-    // Second pass: Determine if each group is a movie or series
+    // Second pass: Determine if each group is a movie or series and assign thumbnails
     Object.values(groups).forEach(group => {
       const hasEpisodeIndicators = group.episodes.some(file => {
         const fileName = file.uri.split('/').pop() || '';
@@ -291,9 +334,27 @@ const Downloads = () => {
           return aInfo.episode - bInfo.episode;
         });
       }
+
+      // Find the first available thumbnail for the group
+      for (const episode of group.episodes) {
+        if (thumbnails[episode.uri]) {
+          group.thumbnail = thumbnails[episode.uri];
+          break;
+        }
+      }
     });
 
     return Object.values(groups);
+  }, [files, thumbnails]);
+
+  // Helper to check if a group is selected (any episode in groupSelected)
+  const isGroupSelected = (group: MediaGroup): boolean => {
+    return group.episodes.some(ep => groupSelected.includes(ep.uri));
+  };
+
+  // Helper to get all episode URIs from a group
+  const getGroupUris = (group: MediaGroup): string[] => {
+    return group.episodes.map(ep => ep.uri);
   };
 
   return (
@@ -324,9 +385,8 @@ const Downloads = () => {
       </View>
 
       <FlashList
-        data={groupMediaFiles()}
-        numColumns={3}
-        estimatedItemSize={150}
+        data={groupMediaFiles}
+        estimatedItemSize={100}
         ListEmptyComponent={() =>
           !loading && (
             <View className="flex-1 justify-center items-center mt-10">
@@ -336,10 +396,10 @@ const Downloads = () => {
         }
         renderItem={({item}) => (
           <TouchableOpacity
-            className={`flex-1 m-0.5 rounded-lg overflow-hidden ${
-              isSelecting && groupSelected.includes(item.episodes[0].uri)
+            className={`flex-row w-full p-2 mb-2 rounded-lg overflow-hidden items-center ${
+              isSelecting && isGroupSelected(item)
                 ? 'bg-quaternary'
-                : 'bg-tertiary'
+                : 'bg-transparent'
             }`}
             onLongPress={() => {
               if (settingsStorage.isHapticFeedbackEnabled()) {
@@ -348,7 +408,7 @@ const Downloads = () => {
                   ignoreAndroidSystemSettings: false,
                 });
               }
-              setGroupSelected(item.episodes.map(ep => ep.uri));
+              setGroupSelected(getGroupUris(item));
               setIsSelecting(true);
             }}
             onPress={() => {
@@ -359,17 +419,21 @@ const Downloads = () => {
                     ignoreAndroidSystemSettings: false,
                   });
                 }
-                if (groupSelected.includes(item.episodes[0].uri)) {
+                const groupUris = getGroupUris(item);
+                if (isGroupSelected(item)) {
+                  // Deselect all episodes in this group
                   setGroupSelected(
-                    groupSelected.filter(f => f !== item.episodes[0].uri),
+                    groupSelected.filter(uri => !groupUris.includes(uri)),
                   );
                 } else {
-                  setGroupSelected([...groupSelected, item.episodes[0].uri]);
+                  // Select all episodes in this group
+                  setGroupSelected([...groupSelected, ...groupUris]);
                 }
-                if (
-                  groupSelected.length === 1 &&
-                  groupSelected[0] === item.episodes[0].uri
-                ) {
+                // Exit selection mode if nothing is selected
+                const remainingSelected = groupSelected.filter(
+                  uri => !groupUris.includes(uri),
+                );
+                if (isGroupSelected(item) && remainingSelected.length === 0) {
                   setIsSelecting(false);
                   setGroupSelected([]);
                 }
@@ -386,6 +450,7 @@ const Downloads = () => {
                     primaryTitle: item.title,
                     poster: {},
                     providerValue: 'vega',
+                    doNotTrack: true,
                   });
                 } else {
                   navigation.navigate('TabStack', {
@@ -405,26 +470,36 @@ const Downloads = () => {
                 }
               }
             }}>
-            <View className="relative aspect-[2/3]">
+            <View className="w-40 aspect-video rounded-md overflow-hidden bg-quaternary mr-3">
               {item.thumbnail ? (
                 <Image
                   source={{uri: item.thumbnail}}
-                  className="w-full h-full rounded-t-lg"
+                  className="w-full h-full"
                   resizeMode="cover"
                 />
               ) : (
-                <View className="w-full h-full bg-quaternary rounded-t-lg" />
+                <View className="w-full h-full items-center justify-center">
+                  <MaterialCommunityIcons
+                    name="movie-open-outline"
+                    size={32}
+                    color={primary}
+                  />
+                </View>
               )}
-              <View className="absolute bottom-0 left-0 right-0 bg-black/50 p-1">
-                <Text className="text-white text-xs" numberOfLines={1}>
-                  {item.title}
+            </View>
+
+            <View className="flex-1 justify-center">
+              <Text
+                className="text-white font-semibold text-lg mb-1"
+                numberOfLines={2}>
+                {item.title}
+              </Text>
+              {!item.isMovie && (
+                <Text className="text-gray-400 text-sm">
+                  {item.episodes.length} episode
+                  {item.episodes.length > 1 ? 's' : ''}
                 </Text>
-                {!item.isMovie && (
-                  <Text className="text-white text-xs opacity-70">
-                    {item.episodes.length} episodes
-                  </Text>
-                )}
-              </View>
+              )}
             </View>
           </TouchableOpacity>
         )}
