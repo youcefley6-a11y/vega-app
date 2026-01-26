@@ -123,6 +123,10 @@ const DownloadComponent = ({
     }
   };
 
+  const animatedStyles = useAnimatedStyle(() => ({
+    opacity: withRepeat(withTiming(0.5, {duration: 500}), -1, true),
+  }));
+
   return (
     <>
       <View className="flex-row items-center mt-1 justify-between rounded-full bg-white/30 p-1">
@@ -132,9 +136,7 @@ const DownloadComponent = ({
               {
                 marginHorizontal: 4,
               },
-              useAnimatedStyle(() => ({
-                opacity: withRepeat(withTiming(0.5, {duration: 500}), -1, true),
-              })),
+              animatedStyles,
             ]}>
             <TouchableOpacity
               onPress={() => {
