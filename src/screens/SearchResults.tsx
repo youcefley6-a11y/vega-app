@@ -6,7 +6,7 @@ import {
   View,
 } from 'react-native';
 import Slider from '../components/Slider';
-import React, {useEffect, useState, useRef, useCallback, useMemo, memo} from 'react';
+import React, {useEffect, useState, useRef, useCallback, useMemo} from 'react';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {SearchStackParamList} from '../App';
 import useThemeStore from '../lib/zustand/themeStore';
@@ -154,10 +154,7 @@ const SearchResults = ({route}: Props): React.ReactElement => {
         abortController.current = null;
       }
     };
-  }, [
-    route.params.filter,
-    installedProviders,
-  ]);
+  }, [route.params.filter, installedProviders]);
 
   const renderSlider = useCallback(
     (item: SearchPageData, index: number, isEmptyResult: boolean = false) => {
