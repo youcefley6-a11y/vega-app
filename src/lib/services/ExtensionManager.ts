@@ -4,18 +4,31 @@ import {
   ProviderExtension,
   ProviderModule,
 } from '../storage/extensionStorage';
+import {settingsStorage} from '../storage';
 /**
  * Extension manager service for handling dynamic provider loading
  */
 export class ExtensionManager {
   private static instance: ExtensionManager;
-  private baseUrl =
+  private defaultBaseUrl =
     'https://raw.githubusercontent.com/Zenda-Cross/vega-providers/refs/heads/main';
 
   private testMode = false;
   private baseUrlTestMode = '';
 
-  private manifestUrl = `${this.baseUrl}/manifest.json`;
+  /**
+   * Get the current base URL (custom or default)
+   */
+  private getBaseUrl(): string {
+    if (settingsStorage.isUsingCustomProviderBaseUrl()) {
+      return settingsStorage.getCustomProviderBaseUrl();
+    }
+    return this.defaultBaseUrl;
+  }
+
+  private get manifestUrl(): string {
+    return `${this.getBaseUrl()}/manifest.json`;
+  }
 
   // Test mode configuration
   private testModuleCacheExpiry = 200000;
@@ -102,7 +115,7 @@ export class ExtensionManager {
       const modules: Record<string, string> = {};
       const downloadPromises = allFiles.map(async fileName => {
         try {
-          const url = `${this.baseUrl}/dist/${providerValue}/${fileName}.js`;
+          const url = `${this.getBaseUrl()}/dist/${providerValue}/${fileName}.js`;
           console.log(`Downloading: ${url}`);
 
           const response = await axios.get(url, {

@@ -2,7 +2,6 @@ import {View, Text, ScrollView, TouchableOpacity} from 'react-native';
 import React from 'react';
 import useContentStore from '../lib/zustand/contentStore';
 import useThemeStore from '../lib/zustand/themeStore';
-import {BlurView} from 'expo-blur';
 import {MaterialIcons} from '@expo/vector-icons';
 
 const ProviderDrawer = ({onClose}: {onClose: () => void}) => {
@@ -12,12 +11,7 @@ const ProviderDrawer = ({onClose}: {onClose: () => void}) => {
   const {primary} = useThemeStore(state => state);
 
   return (
-    <BlurView
-      intensity={90}
-      experimentalBlurMethod="dimezisBlurView"
-      blurReductionFactor={5}
-      tint="dark"
-      className="flex-1">
+    <View className="flex-1" style={{backgroundColor: 'rgba(0,0,0,0.8)'}}>
       <View className="mt-8 px-4 pb-4 border-b border-white/10">
         <Text className="text-white text-2xl font-bold">Select Provider</Text>
         <Text className="text-gray-400 mt-1 text-sm">Content source</Text>
@@ -56,7 +50,7 @@ const ProviderDrawer = ({onClose}: {onClose: () => void}) => {
         ))}
         <View className="h-16" />
       </ScrollView>
-    </BlurView>
+    </View>
   );
 };
 
