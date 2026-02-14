@@ -1,214 +1,47 @@
-import {
-  SafeAreaView,
-  ScrollView,
-  RefreshControl,
-  View,
-  Text,
-} from 'react-native';
-import Slider from '../../components/Slider';
-import React, {useCallback, useMemo, useState} from 'react';
-import HeroOptimized from '../../components/Hero';
-import {mainStorage} from '../../lib/storage';
-import useContentStore from '../../lib/zustand/contentStore';
-import useHeroStore from '../../lib/zustand/herostore';
-import {
-  useHomePageData,
-  getRandomHeroPost,
-  clearHeroCache,
-} from '../../lib/hooks/useHomePageData';
-import useThemeStore from '../../lib/zustand/themeStore';
-import ProviderDrawer from '../../components/ProviderDrawer';
-import {NativeStackScreenProps} from '@react-navigation/native-stack';
-import {HomeStackParamList} from '../../App';
-import {Drawer} from 'react-native-drawer-layout';
-import {GestureHandlerRootView} from 'react-native-gesture-handler';
-import ContinueWatching from '../../components/ContinueWatching';
-import {providerManager} from '../../lib/services/ProviderManager';
-import Tutorial from '../../components/Touturial';
-import {QueryErrorBoundary} from '../../components/ErrorBoundary';
-import {StatusBar} from 'expo-status-bar';
+import React from 'react';
+import { View, Text, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
 
-type Props = NativeStackScreenProps<HomeStackParamList, 'Home'>;
-
-const Home = ({}: Props) => {
-  const {primary} = useThemeStore(state => state);
-  const [backgroundColor, setBackgroundColor] = useState('transparent');
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-
-  // Memoize static values
-  const disableDrawer = useMemo(
-    () => mainStorage.getBool('disableDrawer') || false,
-    [],
-  );
-
-  const {provider, installedProviders} = useContentStore(state => state);
-  const {setHero} = useHeroStore(state => state);
-
-  // React Query for home page data with better error handling
-  const {
-    data: homeData = [],
-    isLoading,
-    error,
-    refetch,
-    isRefetching,
-    // isStale,
-  } = useHomePageData({
-    provider,
-    enabled: !!(installedProviders?.length && provider?.value),
-  });
-
-  // Memoized scroll handler
-  const handleScroll = useCallback((event: any) => {
-    const newBackgroundColor =
-      event.nativeEvent.contentOffset.y > 0 ? 'black' : 'transparent';
-    setBackgroundColor(newBackgroundColor);
-  }, []);
-
-  // Stable hero post calculation - uses provider value for caching
-  const heroPost = useMemo(() => {
-    if (!homeData || homeData.length === 0) {
-      return null;
-    }
-    return getRandomHeroPost(homeData, provider?.value);
-  }, [homeData, provider?.value]);
-
-  // Update hero only when hero post actually changes
-  React.useEffect(() => {
-    if (heroPost) {
-      setHero(heroPost);
-    } else {
-      setHero({link: '', image: '', title: ''});
-    }
-  }, [heroPost, setHero]);
-
-  // Optimized refresh handler
-  const handleRefresh = useCallback(async () => {
-    try {
-      // Clear hero cache to get a new random hero on refresh
-      clearHeroCache(provider?.value);
-      await refetch();
-    } catch (refreshError) {
-      console.error('Error refreshing home data:', refreshError);
-    }
-  }, [refetch, provider?.value]);
-
-  // Memoized loading skeleton
-  const loadingSliders = useMemo(() => {
-    if (!provider?.value) {
-      return [];
-    }
-
-    return providerManager
-      .getCatalog({providerValue: provider.value})
-      .map((item, index) => (
-        <Slider
-          isLoading={true}
-          key={`loading-${item.filter}-${index}`}
-          title={item.title}
-          posts={[]}
-          filter={item.filter}
-        />
-      ));
-  }, [provider?.value]);
-
-  // Memoized content sliders
-  const contentSliders = useMemo(() => {
-    return homeData.map((item, index) => (
-      <Slider
-        isLoading={false}
-        key={`content-${item.filter}-${index}`}
-        title={item.title}
-        posts={item.Posts}
-        filter={item.filter}
-      />
-    ));
-  }, [homeData]);
-
-  // Memoized error message
-  const errorComponent = useMemo(() => {
-    if (!error && (isLoading || homeData.length > 0)) {
-      return null;
-    }
-
-    return (
-      <View className="p-4 m-4 bg-red-500/20 rounded-lg min-h-64 flex-1 justify-center items-center">
-        <Text className="text-red-400 text-center font-medium">
-          {error?.message || 'Failed to load content'}
-        </Text>
-        <Text className="text-gray-400 text-center text-sm mt-1">
-          Pull to refresh and try again
-        </Text>
-      </View>
-    );
-  }, [error, isLoading, homeData.length]);
-
-  // Early return for no providers
-  if (
-    !installedProviders ||
-    installedProviders.length === 0 ||
-    !provider?.value
-  ) {
-    return <Tutorial />;
-  }
-
+export default function Home() {
   return (
-    <QueryErrorBoundary>
-      <GestureHandlerRootView style={{flex: 1}}>
-        <SafeAreaView className="bg-black flex-1">
-          <Drawer
-            open={isDrawerOpen}
-            onOpen={() => setIsDrawerOpen(true)}
-            onClose={() => setIsDrawerOpen(false)}
-            drawerPosition="left"
-            drawerType="front"
-            drawerStyle={{width: 200, backgroundColor: 'transparent'}}
-            swipeEdgeWidth={disableDrawer ? 0 : 70}
-            swipeEnabled={!disableDrawer}
-            renderDrawerContent={() =>
-              !disableDrawer ? (
-                <ProviderDrawer onClose={() => setIsDrawerOpen(false)} />
-              ) : null
-            }>
-            <StatusBar
-              style="auto"
-              animated={true}
-              translucent={true}
-              backgroundColor={backgroundColor}
-            />
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+        {/* Header */}
+        <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: '#222' }}>
+          <Text style={{ color: '#e50914', fontSize: 28, fontWeight: 'bold' }}>Vega</Text>
+        </View>
 
-            <ScrollView
-              onScroll={handleScroll}
-              scrollEventThrottle={16} // Optimize scroll performance
-              showsVerticalScrollIndicator={false}
-              className="bg-black"
-              refreshControl={
-                <RefreshControl
-                  colors={[primary]}
-                  tintColor={primary}
-                  progressBackgroundColor="black"
-                  refreshing={isRefetching}
-                  onRefresh={handleRefresh}
-                />
-              }>
-              <HeroOptimized
-                isDrawerOpen={isDrawerOpen}
-                onOpenDrawer={() => setIsDrawerOpen(true)}
-              />
+        {/* Message principal */}
+        <View style={{ padding: 24, alignItems: 'center' }}>
+          <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 12 }}>
+            No Provider Installed
+          </Text>
+          <Text style={{ color: '#aaa', fontSize: 16, textAlign: 'center', marginBottom: 24 }}>
+            You need to install at least one provider to start watching content.
+          </Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#e50914',
+              paddingVertical: 12,
+              paddingHorizontal: 32,
+              borderRadius: 6,
+            }}
+            onPress={() => {
+              // À connecter plus tard
+              console.log('Install providers');
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Install Providers</Text>
+          </TouchableOpacity>
+        </View>
 
-              <ContinueWatching />
-
-              <View className="-mt-6 relative z-20">
-                {isLoading ? loadingSliders : contentSliders}
-                {errorComponent}
-              </View>
-
-              <View className="h-16" />
-            </ScrollView>
-          </Drawer>
-        </SafeAreaView>
-      </GestureHandlerRootView>
-    </QueryErrorBoundary>
+        {/* Barre du bas simulée */}
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12, backgroundColor: '#111', borderTopWidth: 1, borderTopColor: '#333' }}>
+          <Text style={{ color: '#fff' }}>🏠 Home</Text>
+          <Text style={{ color: '#888' }}>🔍 Search</Text>
+          <Text style={{ color: '#888' }}>📥 Downloads</Text>
+          <Text style={{ color: '#888' }}>👤 Profile</Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
-};
-
-export default React.memo(Home);
+}
